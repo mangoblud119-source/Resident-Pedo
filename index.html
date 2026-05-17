@@ -285,6 +285,21 @@
             z-index: 200;
         }
         .overlay-screen h1 { font-size: 44px; margin-bottom: 20px; color: #ff3333; text-shadow: 2px 2px #000; }
+
+        .save-indicator {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: #00ffcc;
+            font-size: 12px;
+            font-weight: bold;
+            text-shadow: 1px 1px 0px #000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 300;
+        }
+        .save-indicator.show { opacity: 1; }
     </style>
 </head>
 <body>
@@ -354,7 +369,6 @@
     <button id="quitBtn" style="display:none;">QUIT</button>
 
     <div class="control-btn" id="btnLeft">←</div>
-    .control-btn { position: absolute; background: rgba(255, 255, 255, 0.6); border: 3px solid #000; border-radius: 10px; font-weight: bold; font-size: 18px; display: flex; justify-content: center; align-items: center; cursor: pointer; touch-action: none; z-index: 5; }
     <div class="control-btn" id="btnRight">→</div>
     <div class="control-btn" id="btnJump">↑</div>
     <div class="control-btn" id="btnShoot">SHOOT</div>
@@ -382,6 +396,8 @@
         <p style="font-size: 16px; margin-bottom: 20px;">Reward: 20 Tung Tung Bucks (+ Exclusive Cosmetic Unlocked)</p>
         <button class="menu-btn" id="victoryBtn">RETURN TO MENU</button>
     </div>
+
+    <div class="save-indicator" id="saveIndicator">Game Saved</div>
 </div>
 
 <script>
@@ -475,6 +491,67 @@
 
     let keys = {};
     let touchControls = { left: false, right: false, jump: false, shoot: false };
+
+    // ======== LOCAL STORAGE FUNCTIONS ========
+    
+    function saveGame() {
+        try {
+            const saveData = {
+                tungTungBucks: tungTungBucks,
+                totalKills: totalKills,
+                equippedPerk: equippedPerk,
+                perks: {}
+            };
+            
+            // Save perk ownership status
+            Object.keys(GLOBAL_PERKS).forEach(key => {
+                saveData.perks[key] = GLOBAL_PERKS[key].owned;
+            });
+            
+            localStorage.setItem('residentPedoSave', JSON.stringify(saveData));
+            showSaveIndicator();
+        } catch (e) {
+            console.warn("Failed to save game:", e);
+        }
+    }
+    
+    function loadGame() {
+        try {
+            const savedData = localStorage.getItem('residentPedoSave');
+            if (savedData) {
+                const data = JSON.parse(savedData);
+                tungTungBucks = data.tungTungBucks || 0;
+                totalKills = data.totalKills || 0;
+                equippedPerk = data.equippedPerk || null;
+                
+                // Load perk ownership
+                if (data.perks) {
+                    Object.keys(data.perks).forEach(key => {
+                        if (GLOBAL_PERKS[key]) {
+                            GLOBAL_PERKS[key].owned = data.perks[key];
+                        }
+                    });
+                }
+                
+                updateWalletsUI();
+                return true;
+            }
+            return false;
+        } catch (e) {
+            console.warn("Failed to load game:", e);
+            return false;
+        }
+    }
+    
+    function showSaveIndicator() {
+        const indicator = document.getElementById('saveIndicator');
+        indicator.classList.add('show');
+        setTimeout(() => {
+            indicator.classList.remove('show');
+        }, 2000);
+    }
+
+    // ======== END LOCAL STORAGE FUNCTIONS ========
 
     function initPlayer() {
         let startHp = 100;
@@ -643,7 +720,7 @@
         const noneBtn = document.createElement("button");
         noneBtn.innerText = equippedPerk === null ? "EQUIPPED" : "EQUIP";
         if (equippedPerk === null) noneBtn.disabled = true;
-        noneBtn.onclick = () => { equippedPerk = null; openGlobalInv(); drawMenuPose(); };
+        noneBtn.onclick = () => { equippedPerk = null; saveGame(); openGlobalInv(); drawMenuPose(); };
         noneDiv.appendChild(noneBtn);
         grid.appendChild(noneDiv);
 
@@ -656,7 +733,7 @@
                 const btn = document.createElement("button");
                 btn.innerText = equippedPerk === key ? "EQUIPPED" : "EQUIP";
                 if (equippedPerk === key) btn.disabled = true;
-                btn.onclick = () => { equippedPerk = key; openGlobalInv(); drawMenuPose(); };
+                btn.onclick = () => { equippedPerk = key; saveGame(); openGlobalInv(); drawMenuPose(); };
                 div.appendChild(btn);
                 grid.appendChild(div);
             }
@@ -675,10 +752,17 @@
         const eTab = document.getElementById("encyclopediaEnemiesTab");
         const pTab = document.getElementById("encyclopediaPerksTab");
 
+        // Reset all tabs to default
+        wTab.style.background = "#ffcc00";
+        wTab.style.color = "#000";
+        eTab.style.background = "#ff4444";
+        eTab.style.color = "white";
+        pTab.style.background = "#00ffcc";
+        pTab.style.color = "#000";
+
         if (tab === "weapons") {
-            wTab.style.borderColor = "#00ffcc";
-            eTab.style.borderColor = "#000";
-            pTab.style.borderColor = "#000";
+            wTab.style.background = "#e0a100";
+            wTab.style.color = "#000";
 
             Object.keys(WEAPONS).forEach(key => {
                 const w = WEAPONS[key];
@@ -718,9 +802,8 @@
                 w.draw(cCtx, ox, oy);
             });
         } else if (tab === "enemies") {
-            wTab.style.borderColor = "#000";
-            eTab.style.borderColor = "#00ffcc";
-            pTab.style.borderColor = "#000";
+            eTab.style.background = "#cc3333";
+            eTab.style.color = "white";
 
             const ENEMIES_DATA = {
                 normal: { name: "Unit S", hp: "1.50 Speed Baseline Base HP", damage: "10 DMG", speed: "1.50", color: "#5a3a22", size: "Normal", desc: "The foundational hazard. Spawns instantly from Wave 1. Walk speed remains static at 1.50." },
@@ -769,9 +852,8 @@
                 }
             });
         } else if (tab === "perks") {
-            wTab.style.borderColor = "#000";
-            eTab.style.borderColor = "#000";
-            pTab.style.borderColor = "#00ffcc";
+            pTab.style.background = "#00ccaa";
+            pTab.style.color = "#000";
 
             Object.keys(GLOBAL_PERKS).forEach(key => {
                 const p = GLOBAL_PERKS[key];
@@ -802,15 +884,14 @@
                 cCtx.fillStyle = "#1b2a32";
                 cCtx.fillRect(0, 0, 75, 45);
                 
-                // Recalibrate drawing window parameters to isolate and focus on the correct item segment
                 let targetX = 15;
                 let targetY = 0;
                 
-                if (key === "speedy") { targetX = 15; targetY = -52; }    // Focus camera directly on feet
-                if (key === "tanky") { targetX = 15; targetY = -15; }     // Focus camera squarely on vest chest layout
-                if (key === "cig") { targetX = 5; targetY = 8; }          // Extreme closeup on cigarette profile
-                if (key === "cowboy") { targetX = 15; targetY = 22; }     // Lower character to display top of hat crown
-                if (key === "shades") { targetX = 15; targetY = 12; }     // Frame straight on the glasses array
+                if (key === "speedy") { targetX = 15; targetY = -52; }
+                if (key === "tanky") { targetX = 15; targetY = -15; }
+                if (key === "cig") { targetX = 5; targetY = 8; }
+                if (key === "cowboy") { targetX = 15; targetY = 22; }
+                if (key === "shades") { targetX = 15; targetY = 12; }
                 
                 drawTungTungCharacter(cCtx, targetX, targetY, 45, 85, null, key);
             });
@@ -847,8 +928,14 @@
                 btn.innerText = "BUY";
                 btn.onclick = () => {
                     if(tungTungBucks >= p.cost) {
-                        tungTungBucks -= p.cost; p.owned = true; openGlobalShop(); updateWalletsUI();
-                    } else { alert("Not enough Tung Tung Bucks!"); }
+                        tungTungBucks -= p.cost; 
+                        p.owned = true; 
+                        saveGame();
+                        openGlobalShop(); 
+                        updateWalletsUI();
+                    } else { 
+                        alert("Not enough Tung Tung Bucks!"); 
+                    }
                 };
             }
             div.appendChild(btn);
@@ -922,6 +1009,7 @@
     }
 
     function fireWeapon() {
+        
         const wData = WEAPONS[player.currentWeapon];
         const now = performance.now();
         if (player.isReloading) return;
@@ -960,9 +1048,19 @@
         c.fillStyle = "#000"; c.fillRect(x + 25, y + 7, 4, 4); c.fillRect(x + 37, y + 7, 4, 4);
         
         if (perk === "shades") {
+            // Matrix-style sunglasses: narrow, sleek, dark rectangular lenses
+            c.fillStyle = "#0a0a0a";
+            // Left lens
+            c.fillRect(x + 18, y + 5, 12, 8);
+            // Right lens  
+            c.fillRect(x + 32, y + 5, 12, 8);
+            // Bridge
             c.fillStyle = "#111";
-            c.fillRect(x + 18, y + 4, 26, 10); 
-            c.fillRect(x + 15, y + 6, 32, 2);  
+            c.fillRect(x + 30, y + 8, 2, 3);
+            // Frame accent
+            c.fillStyle = "#1a1a1a";
+            c.fillRect(x + 17, y + 5, 1, 8);
+            c.fillRect(x + 44, y + 5, 1, 8);
         }
 
         if (perk === "cig") {
@@ -1037,6 +1135,7 @@
                     intermissionTimeLeft = 10; 
                     lastIntermissionTimestamp = now; 
                     cpPoints += 1; tungTungBucks += 1; 
+                    saveGame();
                 }
             }
         } else if (waveState === "INTERMISSION") {
@@ -1057,6 +1156,7 @@
                 if (!GLOBAL_PERKS.shades.owned) {
                     GLOBAL_PERKS.shades.owned = true;
                 }
+                saveGame();
                 updateWalletsUI();
                 document.getElementById("victoryScreen").style.display = "flex";
                 document.getElementById("quitBtn").style.display = "none";
@@ -1179,8 +1279,14 @@
                             }
                             
                             totalKills++; 
-                            if (e.type === 'normal' && totalKills % 5 === 0) tungTungBucks++; 
-                            if (e.ttb > 0) tungTungBucks += e.ttb;
+                            if (e.type === 'normal' && totalKills % 5 === 0) {
+                                tungTungBucks++;
+                                saveGame();
+                            }
+                            if (e.ttb > 0) {
+                                tungTungBucks += e.ttb;
+                                saveGame();
+                            }
                             updateWalletsUI();
                         }
                         enemies.splice(i, 1); 
@@ -1263,6 +1369,9 @@
         drawTungTungCharacter(pCtx, 70, 50, 50, 95, "pistol", equippedPerk);
     }
 
+    // Load saved data on startup
+    loadGame();
+    
     let lastTime = performance.now();
     function mainLoop(timestamp) {
         let dt = timestamp - lastTime; if (dt > 100) dt = 100; lastTime = timestamp;
